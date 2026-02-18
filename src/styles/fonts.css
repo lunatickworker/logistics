@@ -1,0 +1,38 @@
+/* Asia Head Font Family */
+
+@font-face {
+  font-family: 'Asia Head';
+  src: url('https://wvipjxivfxuwaxvlveyv.supabase.co/storage/v1/object/public/asiafont_asiahead/aasihead1.ttf') format('truetype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Asia Head';
+  src: url('https://wvipjxivfxuwaxvlveyv.supabase.co/storage/v1/object/public/asiafont_asiahead/asihead2.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Asia Head';
+  src: url('https://wvipjxivfxuwaxvlveyv.supabase.co/storage/v1/object/public/asiafont_asiahead/asihead3.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Asia Head';
+  src: url('https://wvipjxivfxuwaxvlveyv.supabase.co/storage/v1/object/public/asiafont_asiahead/asihead4.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Apply font to body */
+body {
+  font-family: 'Asia Head', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+}

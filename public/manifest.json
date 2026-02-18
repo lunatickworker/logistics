@@ -1,0 +1,24 @@
+{
+  "name": "운송 관리 시스템",
+  "short_name": "운송관리",
+  "description": "물류 데이터 관리 및 정산 시스템",
+  "start_url": "/mobile",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
