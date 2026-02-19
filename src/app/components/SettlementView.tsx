@@ -1,17 +1,18 @@
 import { useState, useEffect, useMemo } from "react";
 import { Button } from "./ui/button";
-import { Calendar, TrendingUp, Users, Truck, FileText, ArrowUpDown, ChevronDown, ChevronUp, Download, Search } from "lucide-react";
+import { Calendar, TrendingUp, Users, Truck, FileText, ArrowUpDown, ChevronDown, ChevronUp, Download, Search, Filter } from "lucide-react";
 import { BarChart3 } from "lucide-react";
 import { toast } from "sonner";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, PieChart, Pie } from "recharts";
 import { Input } from "./ui/input";
+import { Record } from "../types";
 
 interface SettlementViewProps {
   apiUrl: string;
   authToken: string;
 }
 
-type SortField = "key" | "count" | "totalInvoiceAmount" | "totalTransportFee";
+type SortField = "key" | "count" | "totalInvoiceAmount" | "totalTransportFee" | "date" | "driverName" | "vehicleNumber" | "invoiceAmount" | "transportFee";
 type SortDirection = "asc" | "desc";
 
 export function SettlementView({ apiUrl, authToken }: SettlementViewProps) {
@@ -97,6 +98,65 @@ export function SettlementView({ apiUrl, authToken }: SettlementViewProps) {
     return items;
   }, [settlementData, sortField, sortDirection, searchQuery]);
 
+  // 일일/월간 정산의 개별 레코드 데이터
+  const processedRecords = useMemo(() => {
+    if (!settlementData?.records) return [];
+
+    let items = settlementData.records as Record[];
+
+    // 검색 필터
+    if (searchQuery.trim()) {
+      items = items.filter((record: Record) => 
+        record.driverName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        record.vehicleNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        record.loadingPoint.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        record.unloadingPoint.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    // 정렬
+    items.sort((a: Record, b: Record) => {
+      let aValue: any;
+      let bValue: any;
+
+      switch (sortField) {
+        case "date":
+          aValue = a.date;
+          bValue = b.date;
+          break;
+        case "driverName":
+          aValue = a.driverName;
+          bValue = b.driverName;
+          break;
+        case "vehicleNumber":
+          aValue = a.vehicleNumber;
+          bValue = b.vehicleNumber;
+          break;
+        case "invoiceAmount":
+          aValue = a.invoiceAmount;
+          bValue = b.invoiceAmount;
+          break;
+        case "transportFee":
+          aValue = a.transportFee;
+          bValue = b.transportFee;
+          break;
+        default:
+          aValue = a.transportFee;
+          bValue = b.transportFee;
+      }
+      
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return sortDirection === "asc" 
+          ? aValue.localeCompare(bValue, 'ko-KR')
+          : bValue.localeCompare(aValue, 'ko-KR');
+      }
+      
+      return sortDirection === "asc" ? aValue - bValue : bValue - aValue;
+    });
+
+    return items;
+  }, [settlementData, sortField, sortDirection, searchQuery]);
+
   // 통계 계산
   const statistics = useMemo(() => {
     if (!processedSettlements.length) return null;
@@ -154,7 +214,45 @@ export function SettlementView({ apiUrl, authToken }: SettlementViewProps) {
   };
 
   const exportToCSV = () => {
-    if (!processedSettlements.length) return;
+    if (!processedSettlements.length && !processedRecords.length) return;
+
+    // 일일/월간 정산의 경우 개별 레코드 내보내기
+    if (activeTab === "daily" || activeTab === "monthly") {
+      const headers = [
+        "일자",
+        "사용자",
+        "차량번호",
+        "상차지",
+        "하차지",
+        "청구운임",
+        "운송료",
+        "요율",
+      ];
+
+      const rows = processedRecords.map((record: Record) => [
+        record.date,
+        record.driverName,
+        record.vehicleNumber,
+        record.loadingPoint,
+        record.unloadingPoint,
+        record.invoiceAmount,
+        record.transportFee,
+        record.rate,
+      ]);
+
+      const csvContent = [
+        headers.join(","),
+        ...rows.map(row => row.join(","))
+      ].join("\n");
+
+      const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", `정산보고서_${activeTab}_${new Date().toISOString().split('T')[0]}.csv`);
+      link.click();
+      return;
+    }
 
     const headers = [
       activeTab === "by-date" ? "일자" : activeTab === "by-user" ? "사용자" : "차량번호",
@@ -219,38 +317,201 @@ export function SettlementView({ apiUrl, authToken }: SettlementViewProps) {
           <div className="space-y-6">
             {/* 일일 및 월간 정산 */}
             {(activeTab === "daily" || activeTab === "monthly") && settlementData && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-blue-500/20 p-5 border border-blue-500/30 shadow-lg shadow-blue-500/10">
-                    <div className="text-sm text-blue-300 font-medium">
+              <div className="space-y-6">
+                {/* 기본 통계 카드 */}
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                  <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/20 p-4 border border-blue-500/30">
+                    <div className="text-xs text-blue-300 font-medium mb-1">
                       {activeTab === "daily" ? "일자" : "월"}
                     </div>
-                    <div className="text-2xl font-bold text-blue-100 mt-1">
+                    <div className="text-xl font-bold text-blue-100">
                       {settlementData.date || settlementData.month}
                     </div>
                   </div>
                   
-                  <div className="bg-emerald-500/20 p-5 border border-emerald-500/30 shadow-lg shadow-emerald-500/10">
-                    <div className="text-sm text-emerald-300 font-medium">총 청구운임</div>
-                    <div className="text-2xl font-bold text-emerald-100 mt-1">
+                  <div className="bg-gradient-to-br from-emerald-500/20 to-emerald-600/20 p-4 border border-emerald-500/30">
+                    <div className="text-xs text-emerald-300 font-medium mb-1">총 청구운임</div>
+                    <div className="text-lg font-bold text-emerald-100">
                       {formatNumber(settlementData.totalInvoiceAmount)}원
                     </div>
                   </div>
                   
-                  <div className="bg-purple-500/20 p-5 border border-purple-500/30 shadow-lg shadow-purple-500/10">
-                    <div className="text-sm text-purple-300 font-medium">총 운송료</div>
-                    <div className="text-2xl font-bold text-purple-100 mt-1">
+                  <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/20 p-4 border border-purple-500/30">
+                    <div className="text-xs text-purple-300 font-medium mb-1">총 운송료</div>
+                    <div className="text-lg font-bold text-purple-100">
                       {formatNumber(settlementData.totalTransportFee)}원
                     </div>
                   </div>
-                </div>
-                
-                <div className="bg-slate-700/50 p-5 border border-slate-600/50">
-                  <div className="text-sm text-slate-300">총 건수</div>
-                  <div className="text-xl font-semibold text-slate-100 mt-1">
-                    {settlementData.count}건
+
+                  <div className="bg-gradient-to-br from-amber-500/20 to-amber-600/20 p-4 border border-amber-500/30">
+                    <div className="text-xs text-amber-300 font-medium mb-1">순수익</div>
+                    <div className="text-lg font-bold text-amber-100">
+                      {formatNumber(settlementData.totalInvoiceAmount - settlementData.totalTransportFee)}원
+                    </div>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-pink-500/20 to-pink-600/20 p-4 border border-pink-500/30">
+                    <div className="text-xs text-pink-300 font-medium mb-1">총 건수</div>
+                    <div className="text-xl font-bold text-pink-100">
+                      {settlementData.count}건
+                    </div>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-cyan-500/20 to-cyan-600/20 p-4 border border-cyan-500/30">
+                    <div className="text-xs text-cyan-300 font-medium mb-1">평균 요율</div>
+                    <div className="text-xl font-bold text-cyan-100">
+                      {settlementData.totalInvoiceAmount > 0 
+                        ? ((settlementData.totalTransportFee / settlementData.totalInvoiceAmount) * 100).toFixed(1)
+                        : '0.0'
+                      }%
+                    </div>
                   </div>
                 </div>
+
+                {/* 개별 레코드가 있는 경우 추가 통계 */}
+                {processedRecords.length > 0 && (
+                  <>
+                    {/* 검색 및 내보내기 */}
+                    <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+                      <div className="relative flex-1 max-w-md">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <Input
+                          type="text"
+                          placeholder="사용자, 차량번호, 상차지, 하차지 검색..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="pl-10 bg-slate-700/30 border-slate-600/50 text-slate-100 placeholder:text-slate-400"
+                        />
+                      </div>
+                      
+                      <Button
+                        onClick={exportToCSV}
+                        className="bg-slate-700/30 hover:bg-slate-700/50 border border-slate-600/50 gap-2"
+                      >
+                        <Download className="w-4 h-4" />
+                        CSV 내보내기
+                      </Button>
+                    </div>
+
+                    {/* 개별 레코드 테이블 */}
+                    <div className="bg-slate-700/30 border border-slate-600/50">
+                      <div className="p-4 border-b border-slate-600/50">
+                        <h3 className="text-lg font-semibold text-slate-100">
+                          개별 레코드 ({processedRecords.length}건)
+                        </h3>
+                      </div>
+
+                      {/* 테이블 헤더 */}
+                      <div className="overflow-x-auto">
+                        <div className="min-w-[800px]">
+                          <div className="grid p-4 bg-slate-700/50 border-b border-slate-600/50 text-slate-300" style={{ gridTemplateColumns: '1.5fr 1.2fr 1.5fr 1.5fr 1.2fr 1.2fr 0.8fr', gap: '12px' }}>
+                            <button
+                              onClick={() => handleSort("driverName")}
+                              className="flex items-center gap-1 hover:text-slate-100 transition-colors text-sm font-semibold"
+                            >
+                              사용자
+                              <ArrowUpDown className="w-3 h-3" />
+                            </button>
+                            
+                            <button
+                              onClick={() => handleSort("vehicleNumber")}
+                              className="flex items-center gap-1 hover:text-slate-100 transition-colors text-sm font-semibold"
+                            >
+                              차량번호
+                              <ArrowUpDown className="w-3 h-3" />
+                            </button>
+                            
+                            <div className="text-sm font-semibold">상차지</div>
+                            <div className="text-sm font-semibold">하차지</div>
+                            
+                            <button
+                              onClick={() => handleSort("invoiceAmount")}
+                              className="flex items-center justify-end gap-1 hover:text-slate-100 transition-colors text-sm font-semibold"
+                            >
+                              <span>청구운임</span>
+                              <ArrowUpDown className="w-3 h-3" />
+                            </button>
+                            
+                            <button
+                              onClick={() => handleSort("transportFee")}
+                              className="flex items-center justify-end gap-1 hover:text-slate-100 transition-colors text-sm font-semibold"
+                            >
+                              <span>운송료</span>
+                              <ArrowUpDown className="w-3 h-3" />
+                            </button>
+                            
+                            <div className="text-right text-sm font-semibold">요율</div>
+                          </div>
+
+                          {/* 데이터 행 */}
+                          <div className="divide-y divide-slate-600/30">
+                            {processedRecords.length === 0 ? (
+                              <div className="p-8 text-center text-slate-400">
+                                검색 결과가 없습니다
+                              </div>
+                            ) : (
+                              processedRecords.map((record: Record, index: number) => (
+                                <div 
+                                  key={record.id} 
+                                  className="grid p-4 hover:bg-slate-700/30 transition-colors text-sm"
+                                  style={{ gridTemplateColumns: '1.5fr 1.2fr 1.5fr 1.5fr 1.2fr 1.2fr 0.8fr', gap: '12px' }}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <div className={`w-1 h-6 ${index % 5 === 0 ? 'bg-purple-500' : index % 5 === 1 ? 'bg-blue-500' : index % 5 === 2 ? 'bg-emerald-500' : index % 5 === 3 ? 'bg-pink-500' : 'bg-orange-500'}`}></div>
+                                    <span className="text-slate-200 font-medium">{record.driverName}</span>
+                                  </div>
+                                  
+                                  <div className="text-slate-300">{record.vehicleNumber}</div>
+                                  <div className="text-slate-300 truncate" title={record.loadingPoint}>{record.loadingPoint}</div>
+                                  <div className="text-slate-300 truncate" title={record.unloadingPoint}>{record.unloadingPoint}</div>
+                                  
+                                  <div className="text-emerald-300 text-right font-semibold">
+                                    {formatNumber(record.invoiceAmount)}원
+                                  </div>
+                                  
+                                  <div className="text-purple-300 text-right font-semibold">
+                                    {formatNumber(record.transportFee)}원
+                                  </div>
+                                  
+                                  <div className="text-cyan-300 text-right font-semibold">
+                                    {(record.rate * 100).toFixed(1)}%
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 요약 정보 */}
+                    {processedRecords.length > 0 && settlementData.records && (
+                      <div className="bg-slate-700/30 p-5 border border-slate-600/50">
+                        <h3 className="text-sm font-semibold text-slate-300 mb-3">요약</h3>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                          <div>
+                            <span className="text-slate-400">평균 청구운임: </span>
+                            <span className="text-slate-100 font-semibold">
+                              {formatNumber(Math.round(settlementData.totalInvoiceAmount / settlementData.count))}원
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400">평균 운송료: </span>
+                            <span className="text-slate-100 font-semibold">
+                              {formatNumber(Math.round(settlementData.totalTransportFee / settlementData.count))}원
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400">표시 레코드: </span>
+                            <span className="text-slate-100 font-semibold">
+                              {processedRecords.length} / {settlementData.records.length}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
 
@@ -362,138 +623,147 @@ export function SettlementView({ apiUrl, authToken }: SettlementViewProps) {
 
                 {/* 정렬 가능한 테이블 헤더 */}
                 <div className="bg-slate-700/50 border border-slate-600/50 overflow-hidden">
-                  <div className="grid grid-cols-4 gap-4 p-4 border-b border-slate-600/50">
-                    <button
-                      onClick={() => handleSort("key")}
-                      className="flex items-center gap-2 text-sm font-semibold text-slate-300 hover:text-slate-100 transition-colors text-left"
-                    >
-                      {activeTab === "by-date" ? "일자" : activeTab === "by-user" ? "사용자" : "차량번호"}
-                      <ArrowUpDown className="w-3 h-3" />
-                    </button>
-                    
-                    <button
-                      onClick={() => handleSort("count")}
-                      className="flex items-center gap-2 text-sm font-semibold text-slate-300 hover:text-slate-100 transition-colors text-left"
-                    >
-                      건수
-                      <ArrowUpDown className="w-3 h-3" />
-                    </button>
-                    
-                    <button
-                      onClick={() => handleSort("totalInvoiceAmount")}
-                      className="flex items-center gap-2 text-sm font-semibold text-slate-300 hover:text-slate-100 transition-colors text-left"
-                    >
-                      청구운임
-                      <ArrowUpDown className="w-3 h-3" />
-                    </button>
-                    
-                    <button
-                      onClick={() => handleSort("totalTransportFee")}
-                      className="flex items-center gap-2 text-sm font-semibold text-slate-300 hover:text-slate-100 transition-colors text-left"
-                    >
-                      운송료
-                      <ArrowUpDown className="w-3 h-3" />
-                    </button>
-                  </div>
-
-                  {/* 데이터 행 */}
-                  <div className="divide-y divide-slate-600/30">
-                    {processedSettlements.length === 0 ? (
-                      <div className="p-8 text-center text-slate-400">
-                        검색 결과가 없습니다
-                      </div>
-                    ) : (
-                      processedSettlements.map((item: any, index: number) => {
-                        const isExpanded = expandedItems.has(item.key);
-                        const rate = item.totalTransportFee / item.totalInvoiceAmount;
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[600px]">
+                      <div className="grid gap-4 p-4 border-b border-slate-600/50 text-sm font-semibold text-slate-300" style={{ gridTemplateColumns: '2fr 1fr 1.5fr 1.5fr' }}>
+                        <button
+                          onClick={() => handleSort("key")}
+                          className="flex items-center gap-2 hover:text-slate-100 transition-colors text-left"
+                        >
+                          {activeTab === "by-date" ? "일자" : activeTab === "by-user" ? "사용자" : "차량번호"}
+                          <ArrowUpDown className="w-3 h-3" />
+                        </button>
                         
-                        return (
-                          <div key={item.key} className="hover:bg-slate-700/30 transition-colors">
-                            <button
-                              onClick={() => toggleExpand(item.key)}
-                              className="w-full grid grid-cols-4 gap-4 p-4 text-left"
-                            >
-                              <div className="flex items-center gap-2">
-                                <div className={`w-1 h-8 ${index % 5 === 0 ? 'bg-purple-500' : index % 5 === 1 ? 'bg-blue-500' : index % 5 === 2 ? 'bg-emerald-500' : index % 5 === 3 ? 'bg-pink-500' : 'bg-orange-500'}`}></div>
-                                <div>
-                                  <div className="font-semibold text-slate-100">{item.key}</div>
-                                  <div className="text-xs text-slate-400 mt-0.5">
-                                    {isExpanded ? <ChevronUp className="w-3 h-3 inline" /> : <ChevronDown className="w-3 h-3 inline" />}
-                                    {' '}상세보기
-                                  </div>
-                                </div>
-                              </div>
-                              
-                              <div className="text-slate-200 flex items-center">
-                                <span className="text-lg font-semibold">{item.count}</span>
-                                <span className="text-xs text-slate-400 ml-1">건</span>
-                              </div>
-                              
-                              <div className="text-emerald-300 flex items-center">
-                                <span className="text-sm font-semibold">{formatNumber(item.totalInvoiceAmount)}</span>
-                                <span className="text-xs text-emerald-400/70 ml-1">원</span>
-                              </div>
-                              
-                              <div className="text-purple-300 flex items-center">
-                                <span className="text-sm font-semibold">{formatNumber(item.totalTransportFee)}</span>
-                                <span className="text-xs text-purple-400/70 ml-1">원</span>
-                              </div>
-                            </button>
+                        <button
+                          onClick={() => handleSort("count")}
+                          className="flex items-center gap-2 hover:text-slate-100 transition-colors text-center"
+                        >
+                          건수
+                          <ArrowUpDown className="w-3 h-3" />
+                        </button>
+                        
+                        <button
+                          onClick={() => handleSort("totalInvoiceAmount")}
+                          className="flex items-center gap-2 hover:text-slate-100 transition-colors text-right justify-end"
+                        >
+                          청구운임
+                          <ArrowUpDown className="w-3 h-3" />
+                        </button>
+                        
+                        <button
+                          onClick={() => handleSort("totalTransportFee")}
+                          className="flex items-center gap-2 hover:text-slate-100 transition-colors text-right justify-end"
+                        >
+                          운송료
+                          <ArrowUpDown className="w-3 h-3" />
+                        </button>
+                      </div>
 
-                            {/* 확장된 상세 정보 */}
-                            {isExpanded && (
-                              <div className="px-4 pb-4 bg-slate-800/50">
-                                <div className="border border-slate-600/50 p-4">
-                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    <div>
-                                      <div className="text-xs text-slate-400 mb-1">평균 청구운임</div>
-                                      <div className="text-sm font-semibold text-slate-200">
-                                        {formatNumber(Math.round(item.totalInvoiceAmount / item.count))}원
-                                      </div>
-                                    </div>
-                                    
-                                    <div>
-                                      <div className="text-xs text-slate-400 mb-1">평균 운송료</div>
-                                      <div className="text-sm font-semibold text-slate-200">
-                                        {formatNumber(Math.round(item.totalTransportFee / item.count))}원
-                                      </div>
-                                    </div>
-                                    
-                                    <div>
-                                      <div className="text-xs text-slate-400 mb-1">평균 요율</div>
-                                      <div className="text-sm font-semibold text-slate-200">
-                                        {(rate * 100).toFixed(1)}%
-                                      </div>
-                                    </div>
-                                    
-                                    <div>
-                                      <div className="text-xs text-slate-400 mb-1">순수익</div>
-                                      <div className="text-sm font-semibold text-amber-300">
-                                        {formatNumber(item.totalInvoiceAmount - item.totalTransportFee)}원
+                      {/* 데이터 행 */}
+                      <div className="divide-y divide-slate-600/30">
+                        {processedSettlements.length === 0 ? (
+                          <div className="p-8 text-center text-slate-400">
+                            검색 결과가 없습니다
+                          </div>
+                        ) : (
+                          processedSettlements.map((item: any, index: number) => {
+                            const isExpanded = expandedItems.has(item.key);
+                            const rate = item.totalTransportFee / item.totalInvoiceAmount;
+                            
+                            return (
+                              <div key={item.key} className="hover:bg-slate-700/30 transition-colors">
+                                <button
+                                  onClick={() => toggleExpand(item.key)}
+                                  className="w-full grid gap-4 p-4 text-left"
+                                  style={{ gridTemplateColumns: '2fr 1fr 1.5fr 1.5fr' }}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <div className={`w-1 h-8 flex-shrink-0 ${index % 5 === 0 ? 'bg-purple-500' : index % 5 === 1 ? 'bg-blue-500' : index % 5 === 2 ? 'bg-emerald-500' : index % 5 === 3 ? 'bg-pink-500' : 'bg-orange-500'}`}></div>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="font-semibold text-slate-100 truncate">{item.key}</div>
+                                      <div className="text-xs text-slate-400 mt-0.5">
+                                        {isExpanded ? <ChevronUp className="w-3 h-3 inline" /> : <ChevronDown className="w-3 h-3 inline" />}
+                                        {' '}상세보기
                                       </div>
                                     </div>
                                   </div>
                                   
-                                  {/* 프로그레스 바 */}
-                                  <div className="mt-4">
-                                    <div className="flex justify-between text-xs text-slate-400 mb-2">
-                                      <span>운송료 비율</span>
-                                      <span>{(rate * 100).toFixed(1)}%</span>
-                                    </div>
-                                    <div className="h-2 bg-slate-700 overflow-hidden">
-                                      <div 
-                                        className="h-full bg-gradient-to-r from-purple-500 to-purple-400 transition-all duration-500"
-                                        style={{ width: `${rate * 100}%` }}
-                                      ></div>
+                                  <div className="text-slate-200 flex items-center justify-center">
+                                    <span className="text-xl font-bold">{item.count}</span>
+                                    <span className="text-xs text-slate-400 ml-1">건</span>
+                                  </div>
+                                  
+                                  <div className="text-emerald-300 flex items-center justify-end">
+                                    <div className="text-right">
+                                      <div className="text-base font-bold">{formatNumber(item.totalInvoiceAmount)}</div>
+                                      <div className="text-xs text-emerald-400/70">원</div>
                                     </div>
                                   </div>
-                                </div>
+                                  
+                                  <div className="text-purple-300 flex items-center justify-end">
+                                    <div className="text-right">
+                                      <div className="text-base font-bold">{formatNumber(item.totalTransportFee)}</div>
+                                      <div className="text-xs text-purple-400/70">원</div>
+                                    </div>
+                                  </div>
+                                </button>
+
+                                {/* 확장된 상세 정보 */}
+                                {isExpanded && (
+                                  <div className="px-4 pb-4 bg-slate-800/50">
+                                    <div className="border border-slate-600/50 p-4">
+                                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                        <div>
+                                          <div className="text-xs text-slate-400 mb-1">평균 청구운임</div>
+                                          <div className="text-sm font-semibold text-slate-200">
+                                            {formatNumber(Math.round(item.totalInvoiceAmount / item.count))}원
+                                          </div>
+                                        </div>
+                                        
+                                        <div>
+                                          <div className="text-xs text-slate-400 mb-1">평균 운송료</div>
+                                          <div className="text-sm font-semibold text-slate-200">
+                                            {formatNumber(Math.round(item.totalTransportFee / item.count))}원
+                                          </div>
+                                        </div>
+                                        
+                                        <div>
+                                          <div className="text-xs text-slate-400 mb-1">평균 요율</div>
+                                          <div className="text-sm font-semibold text-slate-200">
+                                            {(rate * 100).toFixed(1)}%
+                                          </div>
+                                        </div>
+                                        
+                                        <div>
+                                          <div className="text-xs text-slate-400 mb-1">순수익</div>
+                                          <div className="text-sm font-semibold text-amber-300">
+                                            {formatNumber(item.totalInvoiceAmount - item.totalTransportFee)}원
+                                          </div>
+                                        </div>
+                                      </div>
+                                      
+                                      {/* 프로그레스 바 */}
+                                      <div className="mt-4">
+                                        <div className="flex justify-between text-xs text-slate-400 mb-2">
+                                          <span>운송료 비율</span>
+                                          <span>{(rate * 100).toFixed(1)}%</span>
+                                        </div>
+                                        <div className="h-2 bg-slate-700 overflow-hidden">
+                                          <div 
+                                            className="h-full bg-gradient-to-r from-purple-500 to-purple-400 transition-all duration-500"
+                                            style={{ width: `${rate * 100}%` }}
+                                          ></div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
-                        );
-                      })
-                    )}
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
