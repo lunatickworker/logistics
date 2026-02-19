@@ -23,7 +23,11 @@ app.use(
 // Health check endpoint
 app.get("/server/health", (c) => {
   console.log("[Health Check] Endpoint called");
-  return c.json({ status: "ok", timestamp: new Date().toISOString() });
+  return c.json({ 
+    status: "ok", 
+    timestamp: new Date().toISOString(),
+    version: "1.0.1" // 월간 정산 날짜 범위 버그 수정
+  });
 });
 
 // 운송 기록 추가
@@ -154,8 +158,9 @@ app.get("/server/settlement/monthly", async (c) => {
   console.log("[GET /settlement/monthly] Request received");
   try {
     const currentMonth = new Date().toISOString().substring(0, 7); // YYYY-MM
+    console.log(`[GET /settlement/monthly] Fetching data for month: ${currentMonth}`);
     const result = await kv.getMonthlySettlement(currentMonth);
-    console.log(`[GET /settlement/monthly] Found ${result.count} records for ${currentMonth}`);
+    console.log(`[GET /settlement/monthly] Success - Found ${result.count} records for ${currentMonth}`);
     return c.json({ success: true, ...result });
   } catch (error) {
     console.error(`[GET /settlement/monthly] Error:`, error);

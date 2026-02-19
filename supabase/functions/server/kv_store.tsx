@@ -230,11 +230,29 @@ export async function getDailySettlement(date: string) {
  */
 export async function getMonthlySettlement(month: string) {
   const supabase = client();
+  
+  // 다음 달의 첫째 날 계산 (더 안전한 방법)
+  const [year, monthStr] = month.split('-');
+  const monthNum = parseInt(monthStr, 10);
+  
+  let nextYear = parseInt(year, 10);
+  let nextMonthNum = monthNum + 1;
+  
+  if (nextMonthNum > 12) {
+    nextMonthNum = 1;
+    nextYear += 1;
+  }
+  
+  const nextMonthStr = `${nextYear}-${String(nextMonthNum).padStart(2, '0')}-01`;
+  
+  console.log(`[getMonthlySettlement] Querying for month: ${month}`);
+  console.log(`[getMonthlySettlement] Date range: ${month}-01 to ${nextMonthStr} (exclusive)`);
+  
   const { data, error } = await supabase
     .from("transport_records")
     .select("*")
     .gte("date", `${month}-01`)
-    .lt("date", `${month}-32`);
+    .lt("date", nextMonthStr);
 
   if (error) {
     throw new Error(`Failed to fetch monthly settlement: ${error.message}`);
