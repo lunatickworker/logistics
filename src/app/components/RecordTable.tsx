@@ -845,7 +845,7 @@ ${record.purchaseClient}#${record.driverName.charAt(0)}기사님 ${record.driver
                 </div>
               </div>
             ) : (
-              <div key={record.id} className={`p-3 border-l-2 ${idx % 2 === 0 ? 'bg-slate-800/30 border-slate-600' : 'bg-slate-800/10 border-slate-700'}`}>
+              <div key={record.id} className={`p-3 border-l-4 ${record.isNew ? 'bg-red-500/10 border-red-500' : idx % 2 === 0 ? 'bg-slate-800/30 border-slate-600' : 'bg-slate-800/10 border-slate-700'}`}>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <button
@@ -860,6 +860,12 @@ ${record.purchaseClient}#${record.driverName.charAt(0)}기사님 ${record.driver
                     </button>
                     <div className="text-xs font-medium text-slate-400">{record.date}</div>
                     <div className="text-xs font-bold text-blue-400">{record.vehicleNumber}</div>
+                    {record.isNew && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-bold bg-red-500 text-white animate-pulse">
+                        <Bell className="w-3 h-3" />
+                        NEW
+                      </span>
+                    )}
                   </div>
                   <div className="flex gap-1">
                     <Button

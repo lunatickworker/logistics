@@ -19,4 +19,15 @@ export default defineConfig({
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
+
+  // SPA 라우팅을 위한 히스토리 폴백
+  preview: {
+    port: 4173,
+    strictPort: true,
+  },
+  server: {
+    port: 5173,
+    strictPort: true,
+    historyApiFallback: true,
+  },
 })

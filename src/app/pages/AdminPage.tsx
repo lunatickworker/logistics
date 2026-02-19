@@ -81,6 +81,19 @@ export function AdminPage() {
   };
 
   useEffect(() => {
+    // PWA standalone 모드에서 설치된 페이지 확인
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
+                         (window.navigator as any).standalone === true;
+    
+    if (isStandalone) {
+      const installedPage = localStorage.getItem('pwa-install-page');
+      // 모바일 페이지에서 설치했는데 관리자 페이지로 왔다면 모바일로 리다이렉트
+      if (installedPage === '/mobile') {
+        window.location.href = '/mobile';
+        return;
+      }
+    }
+
     fetchRecords();
     
     // Supabase Realtime 구독 설정

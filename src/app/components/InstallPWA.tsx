@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "./ui/button";
 import { Smartphone, X, Download } from "lucide-react";
+import { useLocation } from "react-router";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -8,6 +9,7 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 export function InstallPWA() {
+  const location = useLocation();
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstallButton, setShowInstallButton] = useState(false);
   const [showBanner, setShowBanner] = useState(false);
@@ -15,15 +17,50 @@ export function InstallPWA() {
   const [isStandalone, setIsStandalone] = useState(false);
 
   useEffect(() => {
+    // 현재 페이지 경로를 localStorage에 저장 (PWA 설치 시 사용)
+    localStorage.setItem('pwa-install-page', location.pathname);
+
     // PWA 메타 태그 추가
     const addMetaTags = () => {
-      // manifest
-      if (!document.querySelector('link[rel="manifest"]')) {
-        const manifestLink = document.createElement('link');
-        manifestLink.rel = 'manifest';
-        manifestLink.href = '/manifest.json';
-        document.head.appendChild(manifestLink);
+      // manifest - 동적으로 생성
+      const existingManifest = document.querySelector('link[rel="manifest"]');
+      if (existingManifest) {
+        existingManifest.remove();
       }
+      
+      // 현재 페이지에 맞는 manifest 생성
+      const manifest = {
+        name: location.pathname === '/mobile' ? '운송 기록 입력' : '운송 관리 시스템',
+        short_name: location.pathname === '/mobile' ? '운송입력' : '운송관리',
+        description: '물류 데이터 관리 및 정산 시스템',
+        start_url: location.pathname || '/',
+        display: 'standalone',
+        background_color: '#0f172a',
+        theme_color: '#3b82f6',
+        orientation: 'portrait-primary',
+        icons: [
+          {
+            src: '/icon.svg',
+            sizes: 'any',
+            type: 'image/svg+xml',
+            purpose: 'any maskable'
+          },
+          {
+            src: '/icon.svg',
+            sizes: '512x512',
+            type: 'image/svg+xml',
+            purpose: 'any maskable'
+          }
+        ]
+      };
+
+      const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+      const manifestURL = URL.createObjectURL(manifestBlob);
+      
+      const manifestLink = document.createElement('link');
+      manifestLink.rel = 'manifest';
+      manifestLink.href = manifestURL;
+      document.head.appendChild(manifestLink);
 
       // theme-color
       if (!document.querySelector('meta[name="theme-color"]')) {
@@ -97,7 +134,7 @@ export function InstallPWA() {
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     };
-  }, []);
+  }, [location.pathname]);
 
   const handleInstallClick = async () => {
     if (!deferredPrompt && !isIOS) {
