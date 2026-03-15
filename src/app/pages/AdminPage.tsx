@@ -162,6 +162,7 @@ export function AdminPage() {
     setFilteredRecords(prev => prev.map(r => r.id === id ? { ...r, ...record, isNew: false } : r));
     
     try {
+      console.log('[AdminPage] Updating record', id, record);
       const response = await fetch(`${apiUrl}/records/${id}`, {
         method: "PUT",
         headers: {

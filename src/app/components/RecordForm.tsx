@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { Plus, Calendar, Building2, MapPin, Truck, User, Calculator } from "lucide-react";
+import { Plus, Calendar, MapPin, Truck, Calculator } from "lucide-react";
 
 interface RecordFormProps {
   onSubmit: (record: any) => void;
@@ -16,18 +16,24 @@ export function RecordForm({ onSubmit }: RecordFormProps) {
     unloadingPoint: "",
     vehicleNumber: "",
     driverName: "",
-    rate: "",
+    transportFee: "",
     purchaseClient: "",
     invoiceAmount: "",
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const invoice = parseFloat(formData.invoiceAmount) || 0;
+    const tf = parseFloat(formData.transportFee);
+    const rate = (!isNaN(tf) && invoice > 0) ? tf / invoice : 0;
+
     onSubmit({
       ...formData,
-      rate: parseFloat(formData.rate) || 0,
-      invoiceAmount: parseFloat(formData.invoiceAmount) || 0,
+      rate: rate,
+      invoiceAmount: invoice,
+      transportFee: !isNaN(tf) ? Math.round(tf) : 0,
     });
+
     // 폼 리셋
     setFormData({
       date: new Date().toISOString().split('T')[0],
@@ -36,7 +42,7 @@ export function RecordForm({ onSubmit }: RecordFormProps) {
       unloadingPoint: "",
       vehicleNumber: "",
       driverName: "",
-      rate: "",
+      transportFee: "",
       purchaseClient: "",
       invoiceAmount: "",
     });
@@ -59,7 +65,7 @@ export function RecordForm({ onSubmit }: RecordFormProps) {
             <Calendar className="w-4 h-4 text-blue-400" />
             <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wide">일자 및 거래처</h3>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="date" className="text-slate-300 font-medium">일자</Label>
@@ -72,7 +78,7 @@ export function RecordForm({ onSubmit }: RecordFormProps) {
                 required
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="salesClient" className="text-slate-300 font-medium">매출처</Label>
               <Input
@@ -84,7 +90,7 @@ export function RecordForm({ onSubmit }: RecordFormProps) {
                 required
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="purchaseClient" className="text-slate-300 font-medium">매입처</Label>
               <Input
@@ -105,7 +111,7 @@ export function RecordForm({ onSubmit }: RecordFormProps) {
             <MapPin className="w-4 h-4 text-emerald-400" />
             <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wide">운송 경로</h3>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="loadingPoint" className="text-slate-300 font-medium">상차지</Label>
@@ -118,7 +124,7 @@ export function RecordForm({ onSubmit }: RecordFormProps) {
                 required
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="unloadingPoint" className="text-slate-300 font-medium">하차지</Label>
               <Input
@@ -139,7 +145,7 @@ export function RecordForm({ onSubmit }: RecordFormProps) {
             <Truck className="w-4 h-4 text-purple-400" />
             <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wide">차량 및 운전자</h3>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="vehicleNumber" className="text-slate-300 font-medium">차량번호</Label>
@@ -152,7 +158,7 @@ export function RecordForm({ onSubmit }: RecordFormProps) {
                 required
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="driverName" className="text-slate-300 font-medium">운전자 성명</Label>
               <Input
@@ -173,7 +179,7 @@ export function RecordForm({ onSubmit }: RecordFormProps) {
             <Calculator className="w-4 h-4 text-amber-400" />
             <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wide">금액 정보</h3>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="invoiceAmount" className="text-slate-300 font-medium">청구운임 (원)</Label>
@@ -187,31 +193,33 @@ export function RecordForm({ onSubmit }: RecordFormProps) {
                 required
               />
             </div>
-            
+
             <div className="space-y-2">
-              <Label htmlFor="rate" className="text-slate-300 font-medium">요율</Label>
+              <Label htmlFor="transportFee" className="text-slate-300 font-medium">운송료</Label>
               <Input
-                id="rate"
+                id="transportFee"
                 type="number"
-                step="0.01"
-                value={formData.rate}
-                onChange={(e) => setFormData({ ...formData, rate: e.target.value })}
-                placeholder="예: 0.85"
+                step="1"
+                value={formData.transportFee}
+                onChange={(e) => setFormData({ ...formData, transportFee: e.target.value })}
+                placeholder="예: 425000"
                 className="bg-slate-900/50 border-slate-600 text-white h-11"
-                required
               />
             </div>
           </div>
 
-          {/* 운송료 미리보기 */}
-          {formData.invoiceAmount && formData.rate && (
+          {/* 요율 미리보기 (운송료/청구운임) */}
+          {formData.invoiceAmount && formData.transportFee && (
             <div className="bg-gradient-to-r from-blue-500/20 to-blue-600/20 border border-blue-500/30 p-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-blue-300">계산된 운송료</span>
+                <span className="text-sm font-medium text-blue-300">계산된 요율</span>
                 <span className="text-xl font-bold text-blue-400">
-                  {new Intl.NumberFormat('ko-KR').format(
-                    Math.round(parseFloat(formData.invoiceAmount) * parseFloat(formData.rate))
-                  )}원
+                  {(() => {
+                    const invoice = parseFloat(formData.invoiceAmount) || 0;
+                    const tf = parseFloat(formData.transportFee) || 0;
+                    const r = invoice > 0 ? tf / invoice : 0;
+                    return `${(r * 100).toFixed(2)}%`;
+                  })()}
                 </span>
               </div>
             </div>

@@ -17,6 +17,7 @@ export function MobileInputPage() {
     vehicleNumber: "",
     driverName: "",
     phoneNumber: "",
+    transportFee: "",
   });
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -38,9 +39,14 @@ export function MobileInputPage() {
       return;
     }
 
-    setSaving(true);
+  setSaving(true);
 
     try {
+      // 운송료가 입력된 경우 요율을 계산해서 전송
+      const invoice = parseFloat(formData.invoiceAmount) || 0;
+      const tf = parseFloat(formData.transportFee);
+      const rate = (!isNaN(tf) && invoice > 0) ? tf / invoice : 0;
+
       const response = await fetch(`${apiUrl}/records`, {
         method: "POST",
         headers: {
@@ -55,7 +61,8 @@ export function MobileInputPage() {
           vehicleNumber: formData.vehicleNumber,
           driverName: formData.driverName,
           phoneNumber: formData.phoneNumber,
-          rate: 0, // 관리자가 입력
+          rate: rate, // 운송료 기반으로 계산
+          transportFee: !isNaN(tf) ? Math.round(tf) : 0,
           purchaseClient: "", // 관리자가 입력
           invoiceAmount: parseFloat(formData.invoiceAmount),
           isNew: true, // 새 데이터 플래그
@@ -240,6 +247,19 @@ ${record.driverName} ${record.phoneNumber}`;
                   onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                   className="h-12 text-base bg-slate-900 border-slate-600 text-white"
                   required
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-slate-300 mb-2 block">
+                  운송료 (선택)
+                </label>
+                <Input
+                  type="number"
+                  value={formData.transportFee}
+                  onChange={(e) => setFormData({ ...formData, transportFee: e.target.value })}
+                  placeholder="예: 425000"
+                  className="h-12 text-base bg-slate-900 border-slate-600 text-white placeholder:text-slate-500"
                 />
               </div>
 

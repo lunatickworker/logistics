@@ -1,6 +1,5 @@
 import { Button } from "./ui/button";
 import { Download } from "lucide-react";
-import * as XLSX from "xlsx";
 import Papa from "papaparse";
 
 interface Record {
@@ -52,10 +51,30 @@ export function ExportButton({ records, format }: ExportButtonProps) {
       link.download = `운송기록_${new Date().toISOString().split('T')[0]}.csv`;
       link.click();
     } else {
-      const worksheet = XLSX.utils.json_to_sheet(exportRecords);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, '운송기록');
-      XLSX.writeFile(workbook, `운송기록_${new Date().toISOString().split('T')[0]}.xlsx`);
+      // use ExcelJS to generate xlsx in browser
+      (async () => {
+        const ExcelJS = (await import('exceljs')).default;
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('운송기록');
+
+        // headers
+        const keys = Object.keys(exportRecords[0] || {});
+        worksheet.addRow(keys);
+
+        exportRecords.forEach((row) => {
+          const rowValues = keys.map(k => (row as any)[k]);
+          worksheet.addRow(rowValues);
+        });
+
+        const buf = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `운송기록_${new Date().toISOString().split('T')[0]}.xlsx`;
+        a.click();
+        URL.revokeObjectURL(url);
+      })();
     }
   };
 

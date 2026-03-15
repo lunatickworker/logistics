@@ -1,7 +1,6 @@
 import { useRef } from "react";
 import { Button } from "./ui/button";
 import { Upload, FileSpreadsheet, Download } from "lucide-react";
-import * as XLSX from "xlsx";
 import Papa from "papaparse";
 
 interface FileImportProps {
@@ -18,26 +17,95 @@ export function FileImport({ onImport }: FileImportProps) {
     const fileExtension = file.name.split('.').pop()?.toLowerCase();
 
     if (fileExtension === 'xlsx' || fileExtension === 'xls') {
-      // Excel 파일 처리
+      // Excel 파일 처리 using ExcelJS
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         try {
-          const data = new Uint8Array(e.target?.result as ArrayBuffer);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-          const jsonData = XLSX.utils.sheet_to_json(firstSheet);
-          
-          const records = jsonData.map((row: any) => ({
-            date: row['일자'] || row['date'] || '',
-            salesClient: row['매출처'] || row['salesClient'] || '',
-            loadingPoint: row['상차지'] || row['loadingPoint'] || '',
-            unloadingPoint: row['하차지'] || row['unloadingPoint'] || '',
-            vehicleNumber: row['차량번호'] || row['vehicleNumber'] || '',
-            driverName: row['성명'] || row['driverName'] || '',
-            rate: parseFloat(row['요율'] || row['rate'] || '0'),
-            purchaseClient: row['매입처'] || row['purchaseClient'] || '',
-            invoiceAmount: parseFloat(row['청구운임'] || row['invoiceAmount'] || '0'),
-          }));
+          const arrayBuffer = e.target?.result as ArrayBuffer;
+
+          // dynamic import to keep bundle small
+          const ExcelJS = (await import('exceljs')).default;
+          const workbook = new ExcelJS.Workbook();
+          await workbook.xlsx.load(arrayBuffer);
+
+          const worksheet = workbook.worksheets[0];
+
+          // convert worksheet to array of objects using header row
+          const rows: any[] = [];
+          const headerRow = worksheet.getRow(1);
+          const headers: string[] = [];
+          headerRow.eachCell((cell, colNumber) => {
+            const v = cell.value;
+            headers.push(typeof v === 'string' ? v.trim() : String(v || ''));
+          });
+
+          worksheet.eachRow((row, rowNumber) => {
+            if (rowNumber === 1) return; // skip header
+            const obj: any = {};
+            row.eachCell((cell, colNumber) => {
+              const header = headers[colNumber - 1] || `col${colNumber}`;
+              const val = cell.value;
+              // ExcelJS cell.value can be object for rich types
+              obj[header] = (val && typeof val === 'object' && 'text' in (val as any)) ? (val as any).text : val;
+            });
+            rows.push(obj);
+          });
+
+          const toNumber = (v: any) => {
+            if (v === undefined || v === null) return NaN;
+            if (typeof v === 'string') {
+              const cleaned = v.replace(/,/g, '').trim();
+              if (cleaned.endsWith('%')) return parseFloat(cleaned.slice(0, -1));
+              return parseFloat(cleaned);
+            }
+            return Number(v);
+          };
+
+          const records = rows.map((row: any) => {
+            const invoiceAmountRaw = row['청구운임'] || row['invoiceAmount'] || row['invoice_amount'] || '0';
+            const invoiceAmount = toNumber(invoiceAmountRaw) || 0;
+
+            const transportRaw = row['운송료'] || row['transportFee'] || row['transport_fee'];
+            const transportFee = transportRaw === undefined || transportRaw === null ? NaN : toNumber(transportRaw);
+
+            const rawRate = row['요율'] || row['rate'] || row['rate%'] || row['요율(%)'];
+            let rateVal = rawRate === undefined || rawRate === null ? NaN : toNumber(rawRate);
+            if (!isNaN(rateVal)) {
+              if (rateVal > 1 && rateVal <= 100) rateVal = rateVal / 100;
+            }
+
+            if ((isNaN(rateVal) || rateVal === 0) && !isNaN(transportFee) && invoiceAmount > 0) {
+              rateVal = transportFee / invoiceAmount;
+            }
+
+            const finalTransportFee = !isNaN(transportFee)
+              ? Math.round(transportFee)
+              : Math.round(invoiceAmount * (isNaN(rateVal) ? 0 : rateVal));
+
+            return {
+              date: row['일자'] || row['date'] || '',
+              salesClient: row['매출처'] || row['salesClient'] || '',
+              loadingPoint: row['상차지'] || row['loadingPoint'] || '',
+              unloadingPoint: row['하차지'] || row['unloadingPoint'] || '',
+              vehicleNumber: row['차량번호'] || row['vehicleNumber'] || '',
+              driverName: row['성명'] || row['driverName'] || '',
+              rate: isNaN(rateVal) ? 0 : rateVal,
+              purchaseClient: row['매입처'] || row['purchaseClient'] || '',
+              invoiceAmount: invoiceAmount,
+              transportFee: finalTransportFee,
+            };
+          });
+
+          const badRows = records.filter(r => !r || r.invoiceAmount <= 0 || !r.rate || r.rate === 0);
+          if (badRows.length > 0) {
+            const sample = badRows.slice(0, 5).map((r: any, i: number) => `#${i + 1} date:${r.date} vehicle:${r.vehicleNumber} invoice:${r.invoiceAmount} rate:${r.rate} transportFee:${r.transportFee}`).join('\n');
+            const proceed = confirm(`${badRows.length}개의 레코드에서 요율이 0이거나 청구운임이 0입니다. 계속 진행하시겠습니까?\n\n샘플:\n${sample}`);
+            if (!proceed) {
+              console.warn('Import cancelled by user due to bad rows', badRows);
+              return;
+            }
+          }
+
           onImport(records);
         } catch (error) {
           console.error('Excel 파일 읽기 오류:', error);
@@ -56,7 +124,7 @@ export function FileImport({ onImport }: FileImportProps) {
   };
 
   // Excel 샘플 파일 다운로드
-  const downloadSampleExcel = () => {
+  const downloadSampleExcel = async () => {
     const sampleData = [
       {
         '일자': '2026-02-17',
@@ -66,6 +134,7 @@ export function FileImport({ onImport }: FileImportProps) {
         '차량번호': '12가3456',
         '성명': '홍길동',
         '요율': 0.85,
+        '운송료': 425000,
         '매입처': '(주)운송파트너',
         '청구운임': 500000,
       },
@@ -77,15 +146,32 @@ export function FileImport({ onImport }: FileImportProps) {
         '차량번호': '34나5678',
         '성명': '김철수',
         '요율': 0.90,
+        '운송료': 315000,
         '매입처': '(주)물류센터',
         '청구운임': 350000,
       },
     ];
 
-    const worksheet = XLSX.utils.json_to_sheet(sampleData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, '운송기록');
-    XLSX.writeFile(workbook, '운송기록_샘플.xlsx');
+    const ExcelJS = (await import('exceljs')).default;
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('운송기록');
+
+    // write header from keys
+    const keys = Object.keys(sampleData[0]);
+    worksheet.addRow(keys);
+    sampleData.forEach((row) => {
+      const rowValues = keys.map(k => row[k]);
+      worksheet.addRow(rowValues);
+    });
+
+    const buf = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '운송기록_샘플.xlsx';
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (

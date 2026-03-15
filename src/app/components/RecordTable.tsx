@@ -48,7 +48,7 @@ export function RecordTable({ records, onDelete, onAdd, onUpdate }: RecordTableP
     vehicleNumber: "",
     driverName: "",
     phoneNumber: "",
-    rate: "",
+    transportFee: "",
     purchaseClient: "",
     invoiceAmount: "",
   });
@@ -77,9 +77,15 @@ export function RecordTable({ records, onDelete, onAdd, onUpdate }: RecordTableP
   // 편집 모드 시작
   const handleEdit = (recordId: string) => {
     setEditingId(recordId);
+    const found = records.find(r => r.id === recordId);
     setEditData(prev => ({
       ...prev,
-      [recordId]: records.find(r => r.id === recordId),
+      [recordId]: found ? {
+        ...found,
+        // make inputs controlled as strings to ensure typing works
+        transportFee: String(found.transportFee ?? ''),
+        invoiceAmount: String(found.invoiceAmount ?? ''),
+      } : records.find(r => r.id === recordId),
     }));
   };
   
@@ -88,24 +94,47 @@ export function RecordTable({ records, onDelete, onAdd, onUpdate }: RecordTableP
     const data = editData[recordId] || records.find(r => r.id === recordId);
     if (data) {
       const updatedData = { ...data };
-      
-      const rateValue = parseFloat(updatedData.rate);
       const invoiceValue = parseFloat(updatedData.invoiceAmount);
-      
-      // 유효성 검사
-      if (isNaN(rateValue) || rateValue <= 0) {
-        alert("요율은 0보다 큰 값이어야 합니다.");
-        return;
-      }
-      
+      const tfValue = parseFloat(updatedData.transportFee);
+
+      // 기본 유효성 검사
       if (isNaN(invoiceValue) || invoiceValue < 0) {
         alert("청구운임은 0 이상의 값이어야 합니다.");
         return;
       }
-      
-      const transportFee = Math.round(invoiceValue * rateValue);
-      
+
+      let rateValue = 0;
+      let transportFee = 0;
+
+      // 사용자가 운송료를 입력한 경우 => 요율 계산
+      if (!isNaN(tfValue)) {
+        if (tfValue < 0) {
+          alert("운송료는 0 이상의 값이어야 합니다.");
+          return;
+        }
+        transportFee = Math.round(tfValue);
+        rateValue = invoiceValue > 0 ? transportFee / invoiceValue : 0;
+      } else {
+        // 운송료가 없으면 기존 요율 또는 0을 사용하여 계산
+        const parsedRate = parseFloat(updatedData.rate);
+        rateValue = !isNaN(parsedRate) ? parsedRate : (records.find(r => r.id === recordId)?.rate || 0);
+        transportFee = Math.round(invoiceValue * rateValue);
+      }
+
       onUpdate(recordId, {
+        date: updatedData.date,
+        salesClient: updatedData.salesClient,
+        loadingPoint: updatedData.loadingPoint,
+        unloadingPoint: updatedData.unloadingPoint,
+        vehicleNumber: updatedData.vehicleNumber,
+        driverName: updatedData.driverName,
+        phoneNumber: updatedData.phoneNumber,
+        rate: rateValue,
+        purchaseClient: updatedData.purchaseClient,
+        invoiceAmount: invoiceValue,
+        transportFee: transportFee,
+      });
+      console.log(`[RecordTable] Saving edit for ${recordId}`, {
         date: updatedData.date,
         salesClient: updatedData.salesClient,
         loadingPoint: updatedData.loadingPoint,
@@ -146,15 +175,20 @@ export function RecordTable({ records, onDelete, onAdd, onUpdate }: RecordTableP
     // 필수 필드 검증
     if (!newRecord.date || !newRecord.salesClient || !newRecord.loadingPoint || 
         !newRecord.unloadingPoint || !newRecord.vehicleNumber || !newRecord.driverName || 
-        !newRecord.rate || !newRecord.purchaseClient || !newRecord.invoiceAmount) {
+        !newRecord.purchaseClient || !newRecord.invoiceAmount) {
       alert("모든 필드를 입력해주세요.");
       return;
     }
 
+    const invoice = parseFloat(newRecord.invoiceAmount) || 0;
+    const tf = parseFloat((newRecord as any).transportFee);
+    const rate = (!isNaN(tf) && invoice > 0) ? tf / invoice : 0;
+
     onAdd({
       ...newRecord,
-      rate: parseFloat(newRecord.rate) || 0,
-      invoiceAmount: parseFloat(newRecord.invoiceAmount) || 0,
+      rate: rate,
+      invoiceAmount: invoice,
+      transportFee: !isNaN(tf) ? Math.round(tf) : 0,
     });
 
     // 폼 리셋
@@ -166,7 +200,7 @@ export function RecordTable({ records, onDelete, onAdd, onUpdate }: RecordTableP
       vehicleNumber: "",
       driverName: "",
       phoneNumber: "",
-      rate: "",
+      transportFee: "",
       purchaseClient: "",
       invoiceAmount: "",
     });
@@ -219,9 +253,16 @@ export function RecordTable({ records, onDelete, onAdd, onUpdate }: RecordTableP
     );
   }
 
-  // 운송료 계산
-  const calculatedTransportFee = newRecord.invoiceAmount && newRecord.rate
-    ? Math.round(parseFloat(newRecord.invoiceAmount) * parseFloat(newRecord.rate))
+  // 새 입력 행에서 보여줄 요율 (자동 계산: 운송료 / 청구운임)
+  const calculatedRate = (() => {
+    const invoice = parseFloat(newRecord.invoiceAmount) || 0;
+    const tf = parseFloat((newRecord as any).transportFee) || 0;
+    return invoice > 0 ? tf / invoice : 0;
+  })();
+
+  // 새 입력 행에서 보여줄 운송료 (사용자가 직접 입력할 수 있음)
+  const calculatedTransportFee = newRecord.transportFee
+    ? Math.round(parseFloat(newRecord.transportFee) || 0)
     : 0;
 
   const totalPages = Math.ceil(sortedRecords.length / itemsPerPage);
@@ -239,6 +280,8 @@ export function RecordTable({ records, onDelete, onAdd, onUpdate }: RecordTableP
       return newSet;
     });
   };
+
+  
 
   // 전체 선택/해제
   const toggleSelectAll = () => {
@@ -390,15 +433,10 @@ ${record.purchaseClient}#${record.driverName.charAt(0)}기사님 ${record.driver
                   className="h-11 text-sm bg-slate-900 border-slate-600"
                 />
               </td>
-              <td className="px-3 py-3">
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={newRecord.rate}
-                  onChange={(e) => setNewRecord({ ...newRecord, rate: e.target.value })}
-                  placeholder="0.85"
-                  className="h-11 text-sm bg-slate-900 border-slate-600"
-                />
+              <td className="px-3 py-3 text-right">
+                <div className="text-sm font-semibold text-blue-400 leading-[44px]">
+                  {calculatedRate > 0 ? `${(calculatedRate * 100).toFixed(2)}%` : "-"}
+                </div>
               </td>
               <td className="px-3 py-3">
                 <Input
@@ -418,9 +456,15 @@ ${record.purchaseClient}#${record.driverName.charAt(0)}기사님 ${record.driver
                 />
               </td>
               <td className="px-3 py-3 text-right">
-                <div className="text-sm font-semibold text-blue-400 leading-[44px]">
-                  {calculatedTransportFee > 0 ? `${formatNumber(calculatedTransportFee)}원` : "-"}
-                </div>
+                <Input
+                  type="number"
+                  step="1"
+                  value={String(newRecord.transportFee ?? '')}
+                  onChange={(e) => setNewRecord({ ...newRecord, transportFee: e.target.value })}
+                  placeholder="예: 425000"
+                  className="h-11 text-sm bg-slate-900 border-slate-600 text-right"
+                  autoFocus
+                />
               </td>
               <td className="px-3 py-3 text-center">
                 <Button
@@ -436,9 +480,18 @@ ${record.purchaseClient}#${record.driverName.charAt(0)}기사님 ${record.driver
             {/* 기존 레코드 행들 */}
             {currentRecords.map((record, idx) => {
               const isEditing = editingId === record.id;
-              const editedTransportFee = isEditing && editData[record.id].invoiceAmount && editData[record.id].rate
-                ? Math.round(parseFloat(editData[record.id].invoiceAmount) * parseFloat(editData[record.id].rate))
-                : record.transportFee;
+              const editedTransportFee = isEditing && editData[record.id] && (editData[record.id].transportFee !== undefined && editData[record.id].transportFee !== "")
+                ? Math.round(parseFloat(editData[record.id].transportFee) || 0)
+                : isEditing && editData[record.id] && editData[record.id].invoiceAmount && editData[record.id].rate
+                  ? Math.round(parseFloat(editData[record.id].invoiceAmount) * parseFloat(editData[record.id].rate))
+                  : record.transportFee;
+
+              const editedRate = isEditing && editData[record.id] ? 
+                (() => {
+                  const tf = parseFloat(editData[record.id].transportFee) || 0;
+                  const invoice = parseFloat(editData[record.id].invoiceAmount) || 0;
+                  return invoice > 0 ? tf / invoice : 0;
+                })() : record.rate;
 
               return isEditing ? (
                 <tr key={record.id} className="bg-amber-500/10 border-b-2 border-amber-500/30">
@@ -492,14 +545,10 @@ ${record.purchaseClient}#${record.driverName.charAt(0)}기사님 ${record.driver
                       className="h-9 text-sm bg-slate-900 border-slate-600"
                     />
                   </td>
-                  <td className="px-3 py-3">
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={editData[record.id].rate}
-                      onChange={(e) => handleRecordChange(record.id, "rate", e.target.value)}
-                      className="h-9 text-sm bg-slate-900 border-slate-600"
-                    />
+                  <td className="px-3 py-3 text-right">
+                    <div className="text-sm font-semibold text-amber-400 leading-[36px]">
+                      {editedRate > 0 ? `${(editedRate * 100).toFixed(2)}%` : "-"}
+                    </div>
                   </td>
                   <td className="px-3 py-3">
                     <Input
@@ -511,15 +560,21 @@ ${record.purchaseClient}#${record.driverName.charAt(0)}기사님 ${record.driver
                   <td className="px-3 py-3">
                     <Input
                       type="number"
-                      value={editData[record.id].invoiceAmount}
+                      value={String(editData[record.id]?.invoiceAmount ?? '')}
                       onChange={(e) => handleRecordChange(record.id, "invoiceAmount", e.target.value)}
                       className="h-9 text-sm bg-slate-900 border-slate-600 text-right"
                     />
                   </td>
                   <td className="px-3 py-3 text-right">
-                    <div className="text-sm font-semibold text-amber-400 leading-[36px]">
-                      {editedTransportFee > 0 ? `${formatNumber(editedTransportFee)}원` : "-"}
-                    </div>
+                    <Input
+                      type="number"
+                      step="1"
+                      value={String(editData[record.id]?.transportFee ?? '')}
+                      onChange={(e) => handleRecordChange(record.id, "transportFee", e.target.value)}
+                      className="h-9 text-sm bg-slate-900 border-slate-600 text-right"
+                      placeholder="예: 425000"
+                      autoFocus={editingId === record.id}
+                    />
                   </td>
                   <td className="px-3 py-3 text-center">
                     <div className="flex items-center justify-center gap-1">
@@ -560,7 +615,7 @@ ${record.purchaseClient}#${record.driverName.charAt(0)}기사님 ${record.driver
                   <td className="px-4 py-4 text-sm whitespace-nowrap font-semibold text-blue-400">{record.vehicleNumber}</td>
                   <td className="px-4 py-4 text-sm whitespace-nowrap text-slate-300">{record.driverName}</td>
                   <td className="px-4 py-4 text-sm whitespace-nowrap text-slate-300">{record.phoneNumber}</td>
-                  <td className="px-4 py-4 text-sm whitespace-nowrap text-slate-300">{record.rate.toFixed(2)}</td>
+                  <td className="px-4 py-4 text-sm whitespace-nowrap text-slate-300">{(record.rate * 100).toFixed(2)}</td>
                   <td className="px-4 py-4 text-sm whitespace-nowrap text-slate-300">{record.purchaseClient}</td>
                   <td className="px-4 py-4 text-sm whitespace-nowrap text-right font-semibold text-emerald-400">{formatNumber(record.invoiceAmount)}원</td>
                   <td className="px-4 py-4 text-sm whitespace-nowrap text-right font-bold text-blue-400">{formatNumber(record.transportFee)}원</td>
@@ -675,17 +730,17 @@ ${record.purchaseClient}#${record.driverName.charAt(0)}기사님 ${record.driver
                 className="h-10 text-sm bg-slate-900 border-slate-600"
               />
             </div>
-            <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-xs text-slate-400 mb-1 block">요율</label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={newRecord.rate}
-                  onChange={(e) => setNewRecord({ ...newRecord, rate: e.target.value })}
-                  placeholder="0.85"
-                  className="h-10 text-sm bg-slate-900 border-slate-600"
-                />
+                <label className="text-xs text-slate-400 mb-1 block">운송료</label>
+                      <Input
+                        type="number"
+                        step="1"
+                        value={newRecord.transportFee}
+                        onChange={(e) => setNewRecord({ ...newRecord, transportFee: e.target.value })}
+                        placeholder="예: 425000"
+                        className="h-10 text-sm bg-slate-900 border-slate-600"
+                      />
               </div>
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">청구운임</label>
@@ -718,9 +773,11 @@ ${record.purchaseClient}#${record.driverName.charAt(0)}기사님 ${record.driver
         <div className="divide-y divide-slate-700/30">
           {currentRecords.map((record, idx) => {
             const isEditing = editingId === record.id;
-            const editedTransportFee = isEditing && editData[record.id].invoiceAmount && editData[record.id].rate
-              ? Math.round(parseFloat(editData[record.id].invoiceAmount) * parseFloat(editData[record.id].rate))
-              : record.transportFee;
+              const editedTransportFee = isEditing && editData[record.id] && (editData[record.id].transportFee !== undefined && editData[record.id].transportFee !== "")
+                ? Math.round(parseFloat(editData[record.id].transportFee) || 0)
+                : isEditing && editData[record.id] && editData[record.id].invoiceAmount && editData[record.id].rate
+                  ? Math.round(parseFloat(editData[record.id].invoiceAmount) * parseFloat(editData[record.id].rate))
+                  : record.transportFee;
 
             return isEditing ? (
               <div key={record.id} className="p-4 bg-amber-500/10 border-l-4 border-amber-500">
@@ -798,22 +855,24 @@ ${record.purchaseClient}#${record.driverName.charAt(0)}기사님 ${record.driver
                       className="h-9 text-sm bg-slate-900 border-slate-600"
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-xs text-slate-400 mb-1 block">요율</label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={editData[record.id].rate}
-                        onChange={(e) => handleRecordChange(record.id, "rate", e.target.value)}
-                        className="h-9 text-sm bg-slate-900 border-slate-600"
-                      />
+                      <label className="text-xs text-slate-400 mb-1 block">운송료</label>
+                        <Input
+                          type="number"
+                          step="1"
+                          value={String(editData[record.id]?.transportFee ?? '')}
+                          onChange={(e) => handleRecordChange(record.id, "transportFee", e.target.value)}
+                          className="h-9 text-sm bg-slate-900 border-slate-600"
+                          placeholder="예: 425000"
+                          autoFocus={editingId === record.id}
+                        />
                     </div>
                     <div>
                       <label className="text-xs text-slate-400 mb-1 block">청구운임</label>
                       <Input
                         type="number"
-                        value={editData[record.id].invoiceAmount}
+                        value={String(editData[record.id]?.invoiceAmount ?? '')}
                         onChange={(e) => handleRecordChange(record.id, "invoiceAmount", e.target.value)}
                         className="h-9 text-sm bg-slate-900 border-slate-600"
                       />
@@ -823,6 +882,18 @@ ${record.purchaseClient}#${record.driverName.charAt(0)}기사님 ${record.driver
                     <div className="text-xs text-slate-400 mb-1">운송료 (자동계산)</div>
                     <div className="text-lg font-bold text-amber-400">
                       {editedTransportFee > 0 ? `${formatNumber(editedTransportFee)}원` : "-"}
+                    </div>
+                  </div>
+                  {/* 계산된 요율 표시 (편집 시 수정 불가) */}
+                  <div className="bg-slate-900/40 p-3 border border-amber-700 mt-2">
+                    <div className="text-xs text-slate-400 mb-1">계산된 요율 (자동)</div>
+                    <div className="text-lg font-bold text-amber-400">
+                      {(() => {
+                        const inv = editData[record.id] && editData[record.id].invoiceAmount ? parseFloat(editData[record.id].invoiceAmount) : record.invoiceAmount;
+                        const tf = editedTransportFee || 0;
+                        const r = inv > 0 ? tf / inv : record.rate || 0;
+                        return `${(r * 100).toFixed(2)}%`;
+                      })()}
                     </div>
                   </div>
                   <div className="flex gap-2">
@@ -913,7 +984,7 @@ ${record.purchaseClient}#${record.driverName.charAt(0)}기사님 ${record.driver
                     <span className="text-emerald-300">청구 </span>
                     <span className="font-semibold text-emerald-400">{formatNumber(record.invoiceAmount)}원</span>
                   </div>
-                  <div className="text-xs text-slate-500">×{record.rate.toFixed(2)}</div>
+                  <div className="text-xs text-slate-500">×{(record.rate * 100).toFixed(2)}</div>
                   <div className="text-xs">
                     <span className="text-blue-300">운송 </span>
                     <span className="font-bold text-blue-400">{formatNumber(record.transportFee)}원</span>

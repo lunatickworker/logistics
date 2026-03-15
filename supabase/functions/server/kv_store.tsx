@@ -166,9 +166,29 @@ export async function deleteRecord(id: string) {
 export async function importRecords(records: any[]) {
   const supabase = client();
   const recordsToInsert = records.map((item) => {
-    const rate = Number(item.rate) || 0;
+    // normalize incoming values
     const invoiceAmount = Number(item.invoiceAmount) || 0;
-    const transportFee = Math.round(invoiceAmount * rate);
+
+    // detect transport fee if present (prefer transportFee column)
+    const tfRaw = item.transportFee ?? item.transport_fee ?? item.transport;
+    const hasTf = tfRaw !== undefined && tfRaw !== null && tfRaw !== '';
+    const transportFeeFromColumn = hasTf ? Math.round(Number(tfRaw) || 0) : NaN;
+
+    // parse rate if provided
+    let rate = Number(item.rate);
+    if (isNaN(rate)) rate = 0;
+
+    // if transportFee was provided, compute rate from it (if invoiceAmount>0)
+    let transportFee = transportFeeFromColumn;
+    if (!isNaN(transportFeeFromColumn)) {
+      if (invoiceAmount > 0) {
+        rate = transportFeeFromColumn / invoiceAmount;
+      }
+      transportFee = transportFeeFromColumn;
+    } else {
+      // no transportFee column: compute transportFee from rate
+      transportFee = Math.round(invoiceAmount * (Number(rate) || 0));
+    }
 
     return {
       date: item.date || "",

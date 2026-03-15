@@ -37,9 +37,21 @@ app.post("/server/records", async (c) => {
     const body = await c.req.json();
     console.log("[POST /records] Request body:", body);
     const { date, salesClient, loadingPoint, unloadingPoint, vehicleNumber, driverName, phoneNumber, rate, purchaseClient, invoiceAmount, isNew } = body;
-    
-    const transportFee = Math.round(Number(invoiceAmount) * Number(rate));
-    
+
+    const invoiceAmountNum = Number(invoiceAmount) || 0;
+    const providedTf = body.transportFee ?? body.transport_fee ?? null;
+
+    let rateNum = Number(rate) || 0;
+    let transportFee = Math.round(invoiceAmountNum * rateNum);
+
+    if (providedTf !== null && providedTf !== undefined && providedTf !== "") {
+      const tfVal = Math.round(Number(providedTf) || 0);
+      transportFee = tfVal;
+      if (invoiceAmountNum > 0) {
+        rateNum = tfVal / invoiceAmountNum;
+      }
+    }
+
     const record = await kv.createRecord({
       date,
       salesClient: salesClient || null, // 빈 문자열 대신 null
@@ -47,10 +59,10 @@ app.post("/server/records", async (c) => {
       unloadingPoint,
       vehicleNumber,
       driverName,
-      phoneNumber: phoneNumber || null, // 빈 문자열 대신 null
-      rate: Number(rate) || 0,
+  phoneNumber: phoneNumber || null, // 빈 문자열 대신 null
+      rate: Number(rateNum) || 0,
       purchaseClient: purchaseClient || null, // 빈 문자열 대신 null
-      invoiceAmount: Number(invoiceAmount),
+      invoiceAmount: invoiceAmountNum,
       transportFee,
       isNew: isNew || false,
     });
@@ -83,20 +95,32 @@ app.put("/server/records/:id", async (c) => {
     const id = c.req.param("id");
     const body = await c.req.json();
     const { date, salesClient, loadingPoint, unloadingPoint, vehicleNumber, driverName, phoneNumber, rate, purchaseClient, invoiceAmount, isNew } = body;
-    
-    const transportFee = Math.round(Number(invoiceAmount) * Number(rate));
-    
+
+    const invoiceAmountNum = Number(invoiceAmount) || 0;
+    const providedTf = body.transportFee ?? body.transport_fee ?? null;
+
+    let rateNum = Number(rate) || 0;
+    let transportFee = Math.round(invoiceAmountNum * rateNum);
+
+    if (providedTf !== null && providedTf !== undefined && providedTf !== "") {
+      const tfVal = Math.round(Number(providedTf) || 0);
+      transportFee = tfVal;
+      if (invoiceAmountNum > 0) {
+        rateNum = tfVal / invoiceAmountNum;
+      }
+    }
+
     const record = await kv.updateRecord(id, {
       date,
       salesClient: salesClient || "",
       loadingPoint,
-      unloadingPoint,
+  unloadingPoint: unloadingPoint,
       vehicleNumber,
       driverName,
-      phoneNumber: phoneNumber || "",
-      rate: Number(rate) || 0,
+  phoneNumber: phoneNumber || "",
+      rate: Number(rateNum) || 0,
       purchaseClient: purchaseClient || "",
-      invoiceAmount: Number(invoiceAmount),
+      invoiceAmount: invoiceAmountNum,
       transportFee,
       isNew: isNew || false,
     });
